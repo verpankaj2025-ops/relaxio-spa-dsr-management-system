@@ -1,9 +1,0 @@
-S.No,Visit Date,Time In,Customer Name,Mobile Number,Therapy Name,Therapist / Staff,Amount (₹),Payment Mode,Remarks
-1,2026-08-17,10:00,CLI Test,9999999999,Relax,CLI,100,Cash,
-2,2026-08-17,16:00,&lt;script&gt;alert(&quot;xss&quot;)&lt;&#x2F;script&gt;TestUser,9999988888,Deep Tissue,Therapist,1500,Cash,
-3,2026-08-17,15:30,Aarav Sharma,9876543210,Swedish Massage 60m,Ritu Verma,2500,UPI,Verification test entry
-4,2026-08-17,15:30,Aarav Sharma,9876543210,Swedish Massage 60m,Ritu Verma,2500,UPI,Verification test entry
-5,2026-08-17,14:00,&lt;script&gt;alert(&quot;XSS&quot;)&lt;&#x2F;script&gt;Pankaj,9812345678,Swedish Massage,Ananya Roy,2000,Cash,Testing &lt;img src=x onerror=alert(1)&gt;
-6,2026-08-17,10:30,Aarav Sharma,9876543210,Deep Tissue Massage,Ananya Roy,2500,UPI,Regular client
-7,2026-08-17,11:15,Priya Patel,9812345678,Swedish Massage,Rahul Verma,2000,Cash,First visit
-8,2026-08-17,12:00,Vikram Malhotra,9988776655,Aromatherapy Session,Ananya Roy,555,Card,Updated via CLI
