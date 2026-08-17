@@ -93,6 +93,8 @@ export const removeStoredToken = () => {
   localStorage.removeItem(STORAGE_AUTH_KEY);
 };
 
+const IS_PRODUCTION = ((import.meta as any)?.env?.MODE === 'production') || false;
+
 // Initialize Local Fallback
 const initLocalStorage = () => {
   if (!localStorage.getItem(STORAGE_USERS_KEY)) {
@@ -167,6 +169,7 @@ export async function loginUser(credentials: { email: string; password: string }
       return res;
     }
   } catch (e) {
+    if (IS_PRODUCTION) throw e;
     console.warn('Backend login API error, trying local fallback:', e);
   }
 
@@ -227,10 +230,11 @@ export async function fetchDSREntries(filters?: {
       return entries;
     }
   } catch (e) {
+    if (IS_PRODUCTION) throw e;
     console.warn('Fetch entries API failed, using client storage:', e);
   }
 
-  // Local storage fallback
+  // Local storage fallback (development only)
   let entries: DSREntry[] = JSON.parse(localStorage.getItem(STORAGE_ENTRIES_KEY) || '[]');
   if (filters?.startDate) entries = entries.filter((e) => e.visitDate >= filters.startDate!);
   if (filters?.endDate) entries = entries.filter((e) => e.visitDate <= filters.endDate!);
@@ -293,6 +297,7 @@ export async function createDSREntry(entry: Omit<DSREntry, 'id' | 'createdAt'>):
       return formatted;
     }
   } catch (e) {
+    if (IS_PRODUCTION) throw e;
     console.warn('Create entry API failed, using fallback:', e);
   }
 
@@ -343,6 +348,7 @@ export async function updateDSREntry(id: number, entry: Partial<DSREntry>): Prom
       return formatted;
     }
   } catch (e) {
+    if (IS_PRODUCTION) throw e;
     console.warn('Update entry API failed, using fallback:', e);
   }
 
@@ -358,14 +364,20 @@ export async function updateDSREntry(id: number, entry: Partial<DSREntry>): Prom
 export async function deleteDSREntry(id: number): Promise<boolean> {
   try {
     await apiRequest<any>(`/api/entries?id=${id}`, { method: 'DELETE' });
+    // Update local cache after success
+    let entries: DSREntry[] = JSON.parse(localStorage.getItem(STORAGE_ENTRIES_KEY) || '[]');
+    entries = entries.filter((e) => e.id !== id);
+    localStorage.setItem(STORAGE_ENTRIES_KEY, JSON.stringify(entries));
+    return true;
   } catch (e) {
+    if (IS_PRODUCTION) throw e;
     console.warn('Delete entry API failed, using fallback:', e);
+    // Local fallback (development only)
+    let entries: DSREntry[] = JSON.parse(localStorage.getItem(STORAGE_ENTRIES_KEY) || '[]');
+    entries = entries.filter((e) => e.id !== id);
+    localStorage.setItem(STORAGE_ENTRIES_KEY, JSON.stringify(entries));
+    return true;
   }
-
-  let entries: DSREntry[] = JSON.parse(localStorage.getItem(STORAGE_ENTRIES_KEY) || '[]');
-  entries = entries.filter((e) => e.id !== id);
-  localStorage.setItem(STORAGE_ENTRIES_KEY, JSON.stringify(entries));
-  return true;
 }
 
 // ---------------------------------------------------------
@@ -376,6 +388,7 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     const summary = await apiRequest<DashboardSummary>('/api/dashboard/summary');
     if (summary) return summary;
   } catch (e) {
+    if (IS_PRODUCTION) throw e;
     console.warn('Dashboard summary API failed, computing from entries:', e);
   }
 
@@ -426,6 +439,7 @@ export async function fetchUsers(): Promise<User[]> {
       return users;
     }
   } catch (e) {
+    if (IS_PRODUCTION) throw e;
     console.warn('Fetch users API failed, using fallback:', e);
   }
 
@@ -455,6 +469,7 @@ export async function createUser(user: Omit<User, 'id' | 'createdAt'>): Promise<
       return formatted;
     }
   } catch (e) {
+    if (IS_PRODUCTION) throw e;
     console.warn('Create user API failed, using fallback:', e);
   }
 
@@ -464,6 +479,7 @@ export async function createUser(user: Omit<User, 'id' | 'createdAt'>): Promise<
     id: Date.now(),
     createdAt: new Date().toISOString(),
   };
+
   users.push(newUser);
   localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(users));
   return newUser;
@@ -495,6 +511,7 @@ export async function updateUserStatus(id: number, status: 'ACTIVE' | 'DISABLED'
       return formatted;
     }
   } catch (e) {
+    if (IS_PRODUCTION) throw e;
     console.warn('Update user status API failed, using fallback:', e);
   }
 
@@ -516,6 +533,7 @@ export async function deleteUser(id: number): Promise<boolean> {
   try {
     await apiRequest<any>(`/api/users?id=${id}`, { method: 'DELETE' });
   } catch (e) {
+    if (IS_PRODUCTION) throw e;
     console.warn('Delete user API failed, using fallback:', e);
   }
 
@@ -536,6 +554,7 @@ export async function fetchSettings(): Promise<AppSettings> {
       return data;
     }
   } catch (e) {
+    if (IS_PRODUCTION) throw e;
     console.warn('Fetch settings API failed, using fallback:', e);
   }
 
@@ -554,6 +573,7 @@ export async function updateSettings(newSettings: Partial<AppSettings>): Promise
       return updated;
     }
   } catch (e) {
+    if (IS_PRODUCTION) throw e;
     console.warn('Update settings API failed, using fallback:', e);
   }
 
@@ -569,6 +589,17 @@ export const api = {
   createEntry: createDSREntry,
   updateEntry: updateDSREntry,
   deleteEntry: deleteDSREntry,
+  deleteCustomer: async (opts: { mobile?: string; name?: string }) => {
+    // backend route: DELETE /api/entries?customerMobile=... or ?customerName=...
+    const params = new URLSearchParams();
+    if (opts.mobile) params.set('customerMobile', opts.mobile);
+    else if (opts.name) params.set('customerName', opts.name);
+    else throw new Error('customer identifier required');
+
+    const url = `/api/entries?${params.toString()}`;
+    const res = await apiRequest<any>(url, { method: 'DELETE' });
+    return res;
+  },
   getUsers: fetchUsers,
   createUser: createUser,
   updateUserStatus: updateUserStatus,

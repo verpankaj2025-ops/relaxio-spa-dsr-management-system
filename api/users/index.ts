@@ -1,7 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import { db } from '../db.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase.js';
 import {
   isNonEmptyString,
   isValidEmail,
@@ -10,31 +10,33 @@ import {
   sendInternalError,
 } from '../middleware/validate.js';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
-
 export default async function handler(req: any, res: any) {
-
-  console.log("STEP 1 - Handler Started");
-
   const user = await requireAuth(req, res);
-
-  console.log("STEP 2 - Auth Result:", user);
-
   if (!user) return;
 
-  const supabase = null;
-
-  console.log("SUPABASE ENABLED:", !!supabase);
-
   // ---------------------------------------------------------
-// GET: List users
-// ---------------------------------------------------------
-if (req.method === 'GET') {
-  console.log("USERS API TEST");
+  // GET: List users
+  // ---------------------------------------------------------
+  if (req.method === 'GET') {
+    try {
+      if (isSupabaseConfigured()) {
+        const supabase = getSupabaseClient();
+        if (!supabase) return res.status(503).json({ error: 'Service Unavailable: Database client initialization failed', statusCode: 503 });
 
-  return res.status(200).json(db.getUsers());
-}
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, name, email, role, status, created_at')
+          .order('created_at', { ascending: false });
+
+        if (error) return sendInternalError(res, error, 'Failed to list users from database');
+        return res.status(200).json(data || []);
+      }
+
+      return res.status(200).json(db.getUsers());
+    } catch (err: any) {
+      return sendInternalError(res, err, 'Failed to list users');
+    }
+  }
 
   // Administrative operations require SUPER_ADMIN role
   const adminUser = await requireRole(req, res, ['SUPER_ADMIN']);
@@ -60,13 +62,11 @@ if (req.method === 'GET') {
       return sendValidationError(res, errors);
     }
 
-    // Accept either a plaintext `password` or a `password_hash` (bcrypt) in the request.
     const rawPassword = (req.body && req.body.password) || undefined;
     const providedHash = (req.body && req.body.password_hash) || undefined;
 
     let password_hash: string | undefined = undefined;
     if (isNonEmptyString(rawPassword)) {
-      // Hash server-side using bcrypt
       password_hash = bcrypt.hashSync(String(rawPassword), 10);
     } else if (isNonEmptyString(providedHash)) {
       password_hash = String(providedHash).trim();
@@ -85,20 +85,21 @@ if (req.method === 'GET') {
     };
 
     try {
-      if (supabase) {
-        try {
-          const { data, error } = await supabase.from('users').insert([payload]).select('id, name, email, role, status, created_at').single();
-          if (!error && data) {
-            db.createUser(payload);
-            // Do not expose password_hash in API responses
-            const safe = { id: data.id, name: data.name, email: data.email, role: data.role, status: data.status, created_at: data.created_at };
-            return res.status(201).json(safe);
-          }
-        } catch (_) {}
+      if (isSupabaseConfigured()) {
+        const supabase = getSupabaseClient();
+        if (!supabase) return res.status(503).json({ error: 'Service Unavailable: Database client initialization failed', statusCode: 503 });
+
+        const { data, error } = await supabase.from('users').insert([payload]).select('id, name, email, role, status, created_at').single();
+        if (error) return sendInternalError(res, error, 'Failed to create user in database');
+        if (data) {
+          // Mirror local DB for development purposes
+          try { db.createUser(payload); } catch (e) {}
+          const safe = { id: data.id, name: data.name, email: data.email, role: data.role, status: data.status, created_at: data.created_at };
+          return res.status(201).json(safe);
+        }
       }
 
       const newUser = db.createUser(payload);
-      // Sanitize response
       const safeUser = { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role, status: newUser.status, created_at: newUser.created_at };
       return res.status(201).json(safeUser);
     } catch (err: any) {
@@ -111,24 +112,18 @@ if (req.method === 'GET') {
   // ---------------------------------------------------------
   if (req.method === 'PUT' || req.method === 'PATCH') {
     const targetUserId = req.query?.id || req.body?.id;
-    if (!targetUserId) {
-      return sendValidationError(res, 'User ID parameter (id) is required');
-    }
+    if (!targetUserId) return sendValidationError(res, 'User ID parameter (id) is required');
 
     const { status, role, name, email } = req.body || {};
     const updates: any = {};
 
     if (status !== undefined) {
-      if (!['ACTIVE', 'DISABLED'].includes(String(status).toUpperCase())) {
-        return sendValidationError(res, 'Status must be ACTIVE or DISABLED');
-      }
+      if (!['ACTIVE', 'DISABLED'].includes(String(status).toUpperCase())) return sendValidationError(res, 'Status must be ACTIVE or DISABLED');
       updates.status = String(status).toUpperCase();
     }
 
     if (role !== undefined) {
-      if (!['SUPER_ADMIN', 'ADMIN'].includes(String(role).toUpperCase())) {
-        return sendValidationError(res, 'Role must be SUPER_ADMIN or ADMIN');
-      }
+      if (!['SUPER_ADMIN', 'ADMIN'].includes(String(role).toUpperCase())) return sendValidationError(res, 'Role must be SUPER_ADMIN or ADMIN');
       updates.role = String(role).toUpperCase();
     }
 
@@ -142,26 +137,26 @@ if (req.method === 'GET') {
     }
 
     try {
-      if (supabase) {
-        try {
-          const { data, error } = await supabase
-            .from('users')
-            .update(updates)
-            .eq('id', targetUserId)
-            .select('id, name, email, role, status, created_at')
-            .maybeSingle();
+      if (isSupabaseConfigured()) {
+        const supabase = getSupabaseClient();
+        if (!supabase) return res.status(503).json({ error: 'Service Unavailable: Database client initialization failed', statusCode: 503 });
 
-          if (!error && data) {
-            db.updateUser(targetUserId, updates);
-            return res.status(200).json(data);
-          }
-        } catch (_) {}
+        const { data, error } = await supabase
+          .from('users')
+          .update(updates)
+          .eq('id', targetUserId)
+          .select('id, name, email, role, status, created_at')
+          .maybeSingle();
+
+        if (error) return sendInternalError(res, error, 'Failed to update user in database');
+        if (data) {
+          try { db.updateUser(targetUserId, updates); } catch (e) {}
+          return res.status(200).json(data);
+        }
       }
 
       const updatedUser = db.updateUser(targetUserId, updates);
-      if (!updatedUser) {
-        return res.status(404).json({ error: 'User not found', statusCode: 404 });
-      }
+      if (!updatedUser) return res.status(404).json({ error: 'User not found', statusCode: 404 });
 
       const safe = { id: updatedUser.id, name: updatedUser.name, email: updatedUser.email, role: updatedUser.role, status: updatedUser.status, created_at: updatedUser.created_at };
       return res.status(200).json(safe);
@@ -175,9 +170,7 @@ if (req.method === 'GET') {
   // ---------------------------------------------------------
   if (req.method === 'DELETE') {
     const targetUserId = req.query?.id || req.body?.id;
-    if (!targetUserId) {
-      return sendValidationError(res, 'User ID parameter (id) is required');
-    }
+    if (!targetUserId) return sendValidationError(res, 'User ID parameter (id) is required');
 
     if (String(targetUserId) === '1' || String(targetUserId) === String(user.id)) {
       return res.status(400).json({
@@ -187,10 +180,13 @@ if (req.method === 'GET') {
     }
 
     try {
-      if (supabase) {
-        try {
-          await supabase.from('users').delete().eq('id', targetUserId);
-        } catch (_) {}
+      if (isSupabaseConfigured()) {
+        const supabase = getSupabaseClient();
+        if (!supabase) return res.status(503).json({ error: 'Service Unavailable: Database client initialization failed', statusCode: 503 });
+
+        const { data, error } = await supabase.from('users').delete().eq('id', targetUserId).select().maybeSingle();
+        if (error) return sendInternalError(res, error, 'Failed to delete user in database');
+        if (!data) return res.status(404).json({ error: 'User not found', statusCode: 404 });
       }
 
       db.deleteUser(targetUserId);

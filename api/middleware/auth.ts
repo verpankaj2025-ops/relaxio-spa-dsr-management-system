@@ -1,15 +1,13 @@
 import jwt from 'jsonwebtoken';
-import { createClient } from '@supabase/supabase-js';
 import { db } from '../db.js';
+import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
+
 if (!JWT_SECRET) {
   console.error('Fatal: JWT_SECRET environment variable is not set. Aborting startup.');
-  // Fail fast during module load to prevent the server from running without a secret
   throw new Error('JWT_SECRET environment variable is required');
 }
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 
 export interface AuthUser {
   id: number | string;
@@ -20,96 +18,101 @@ export interface AuthUser {
 }
 
 /**
- * Extracts and cryptographically verifies the JWT authentication token from request headers.
+ * Extract and cryptographically verify the JWT authentication token.
+ * When Supabase is configured, resolve the user against Supabase to ensure
+ * current role/status are authoritative. Fall back to local file DB only in
+ * non-production when Supabase is not configured.
  */
 export async function getAuthUser(req: any): Promise<AuthUser | null> {
-
-  console.log("GETAUTH STEP 1");
-
   const authHeader = req.headers['authorization'] || req.headers['x-auth-token'] || '';
-  const rawToken = typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
-    ? authHeader.slice(7).trim()
-    : String(authHeader).trim();
+  const rawToken = typeof authHeader === 'string' && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : String(authHeader).trim();
 
-    console.log("GETAUTH STEP 2 Token:", rawToken.substring(0,20));
+  if (!rawToken) return null;
 
-  if (!rawToken) {
+  let decoded: any;
+  try {
+    decoded = jwt.verify(rawToken, JWT_SECRET) as any;
+  } catch (e) {
     return null;
   }
 
-  // 1. Verify standard JWT signature only (no legacy fallbacks)
-  try {
+  if (!decoded?.id || !decoded?.email) return null;
+  const decodedId = decoded.id;
+  const decodedEmail = String(decoded.email).trim().toLowerCase();
 
-    console.log("GETAUTH STEP 3 Before Verify");
+  // If Supabase is configured, prefer the canonical user from Supabase
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseClient();
+    if (!supabase) throw new Error('Supabase client initialization failed');
 
-    const decoded = jwt.verify(rawToken, JWT_SECRET) as any;
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .or(`id.eq.${decodedId},email.eq.${decodedEmail}`)
+      .maybeSingle();
 
-    console.log("GETAUTH STEP 4 After Verify", decoded);
-
-    if (decoded && decoded.id && decoded.email) {
-      // Confirm user status in database (do not leak password_hash)
-
-      console.log("GETAUTH STEP 5 Looking in DB");
-
-      const userInDb = db.getUsers().find(u => u.id === decoded.id || u.email.toLowerCase() === decoded.email.toLowerCase());
-
-      console.log("GETAUTH STEP 6 Found:", userInDb);
-
-      if (userInDb) {
-        return {
-          id: userInDb.id,
-          name: userInDb.name,
-          email: userInDb.email,
-          role: userInDb.role,
-          status: userInDb.status,
-        };
-      }
-      return {
-        id: decoded.id,
-        name: decoded.name || 'Authenticated User',
-        email: decoded.email,
-        role: decoded.role || 'ADMIN',
-        status: decoded.status || 'ACTIVE',
-      };
+    if (error) {
+      // Propagate error to caller so the middleware can return 503 in production
+      throw error;
     }
-  } catch (e) {
-    // verification failed — return null below
+
+    if (!data) return null;
+    if (data.status !== 'ACTIVE') return null;
+
+    return {
+      id: data.id,
+      name: data.name,
+      email: data.email,
+      role: data.role as 'SUPER_ADMIN' | 'ADMIN',
+      status: data.status as 'ACTIVE' | 'DISABLED',
+    };
   }
 
-  // JWT already verified successfully.
-// Do NOT perform an additional Supabase lookup here.
-
-  return null;
+  // Fallback to local DB for development when Supabase is not configured
+  const userInDb = db.getUsers().find(u => String(u.id) === String(decodedId) || u.email.toLowerCase() === decodedEmail);
+  if (!userInDb) return null;
+  return {
+    id: userInDb.id,
+    name: userInDb.name,
+    email: userInDb.email,
+    role: userInDb.role,
+    status: userInDb.status,
+  };
 }
 
 /**
- * Enforces authentication requirement on protected routes.
+ * Require a valid authenticated user.
  */
 export async function requireAuth(req: any, res: any): Promise<AuthUser | null> {
-
-  console.log("AUTH STEP 1");
-  const user = await getAuthUser(req);
-  console.log("AUTH STEP 2", user);
-
-  if (!user) {
-    res.status(401).json({
-      error: 'Unauthorized: Authentication token is missing, expired, or invalid',
-      statusCode: 401,
-    });
+  // In production the Supabase datasource must be configured.
+  if (process.env.NODE_ENV === 'production' && !isSupabaseConfigured()) {
+    res.status(503).json({ error: 'Service Unavailable: Production database is not configured', statusCode: 503 });
     return null;
   }
-  if (user.status !== 'ACTIVE') {
-    res.status(403).json({
-      error: 'Forbidden: User account is disabled or inactive',
-      statusCode: 403,
-    });
+
+  try {
+    const user = await getAuthUser(req);
+    if (!user) {
+      res.status(401).json({ error: 'Unauthorized: Authentication token is missing, expired, or invalid', statusCode: 401 });
+      return null;
+    }
+
+    if (user.status !== 'ACTIVE') {
+      res.status(403).json({ error: 'Forbidden: User account is disabled or inactive', statusCode: 403 });
+      return null;
+    }
+
+    return user;
+  } catch (err: any) {
+    // Database or network error when checking Supabase
+    console.error('Authentication error:', err && err.message ? err.message : err);
+    res.status(503).json({ error: 'Service Unavailable: Authentication database error', statusCode: 503 });
     return null;
   }
-  return user;
 }
 
 /**
- * Enforces role-based permissions on administrative routes.
+ * Require authentication plus one of the specified roles.
  */
 export async function requireRole(
   req: any,
@@ -120,13 +123,9 @@ export async function requireRole(
   if (!user) return null;
 
   if (!allowedRoles.includes(user.role)) {
-    res.status(403).json({
-      error: `Forbidden: Requires one of the following roles: ${allowedRoles.join(', ')}`,
-      statusCode: 403,
-    });
+    res.status(403).json({ error: `Forbidden: Requires one of the following roles: ${allowedRoles.join(', ')}`, statusCode: 403 });
     return null;
   }
 
   return user;
 }
-
