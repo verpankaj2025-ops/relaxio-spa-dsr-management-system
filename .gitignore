@@ -13,3 +13,4 @@ data/backups/
 *.zip
 server.log
 verify_runtime.log
+.vercel
