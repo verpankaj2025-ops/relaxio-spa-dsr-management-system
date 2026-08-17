@@ -6,3 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Runtime / Generated files
+tmp/
+data/backups/
+*.zip
+server.log
+verify_runtime.log
