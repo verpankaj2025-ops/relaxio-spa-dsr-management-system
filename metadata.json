@@ -1,0 +1,6 @@
+{
+  "name": "The Cloud Spa - Daily Sales Report System",
+  "description": "Daily Sales Report (DSR) application for The Cloud Spa to manage customer entries, daily revenue, therapist logs, and sales reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

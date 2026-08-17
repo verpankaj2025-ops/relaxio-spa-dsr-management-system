@@ -1,0 +1,31 @@
+{
+  "generatedFiles": [
+    {
+      "name": "Excel",
+      "path": "/Users/pankajverma/Downloads/relaxio-spa-dsr-management-system/tmp/exports/The_Cloud_Spa_DSR_Report.xlsx",
+      "size": 19387,
+      "pass": true
+    },
+    {
+      "name": "CSV",
+      "path": "/Users/pankajverma/Downloads/relaxio-spa-dsr-management-system/tmp/exports/The_Cloud_Spa_DSR_Report.csv",
+      "size": 983,
+      "pass": true
+    },
+    {
+      "name": "PDF",
+      "path": "/Users/pankajverma/Downloads/relaxio-spa-dsr-management-system/tmp/exports/The_Cloud_Spa_DSR_Report.pdf",
+      "size": 26695,
+      "pass": true
+    },
+    {
+      "name": "Print HTML",
+      "path": "/Users/pankajverma/Downloads/relaxio-spa-dsr-management-system/tmp/exports/The_Cloud_Spa_DSR_Report.html",
+      "size": 1674,
+      "pass": true
+    }
+  ],
+  "unicodeInHtml": true,
+  "totalEntries": 8,
+  "totalAmount": 13655
+}

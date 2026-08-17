@@ -1,0 +1,1 @@
+-- Refer to schema.sql for the canonical database schema.
