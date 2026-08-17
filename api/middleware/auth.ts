@@ -23,10 +23,15 @@ export interface AuthUser {
  * Extracts and cryptographically verifies the JWT authentication token from request headers.
  */
 export async function getAuthUser(req: any): Promise<AuthUser | null> {
+
+  console.log("GETAUTH STEP 1");
+
   const authHeader = req.headers['authorization'] || req.headers['x-auth-token'] || '';
   const rawToken = typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
     ? authHeader.slice(7).trim()
     : String(authHeader).trim();
+
+    console.log("GETAUTH STEP 2 Token:", rawToken.substring(0,20));
 
   if (!rawToken) {
     return null;
@@ -34,10 +39,22 @@ export async function getAuthUser(req: any): Promise<AuthUser | null> {
 
   // 1. Verify standard JWT signature only (no legacy fallbacks)
   try {
+
+    console.log("GETAUTH STEP 3 Before Verify");
+
     const decoded = jwt.verify(rawToken, JWT_SECRET) as any;
+
+    console.log("GETAUTH STEP 4 After Verify", decoded);
+
     if (decoded && decoded.id && decoded.email) {
       // Confirm user status in database (do not leak password_hash)
+
+      console.log("GETAUTH STEP 5 Looking in DB");
+
       const userInDb = db.getUsers().find(u => u.id === decoded.id || u.email.toLowerCase() === decoded.email.toLowerCase());
+
+      console.log("GETAUTH STEP 6 Found:", userInDb);
+
       if (userInDb) {
         return {
           id: userInDb.id,
@@ -59,26 +76,8 @@ export async function getAuthUser(req: any): Promise<AuthUser | null> {
     // verification failed — return null below
   }
 
-  // Optional: Supabase lookup if configured (still requires valid token matching a user)
-  if (supabaseUrl && supabaseKey) {
-    try {
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      // If token cannot be verified locally, do not attempt legacy parsing — only query by token as-is
-      const { data } = await supabase
-        .from('users')
-        .select('*')
-        .maybeSingle();
-      if (data) {
-        return {
-          id: data.id,
-          name: data.name,
-          email: data.email,
-          role: data.role as 'SUPER_ADMIN' | 'ADMIN',
-          status: data.status as 'ACTIVE' | 'DISABLED',
-        };
-      }
-    } catch (_) {}
-  }
+  // JWT already verified successfully.
+// Do NOT perform an additional Supabase lookup here.
 
   return null;
 }
@@ -87,7 +86,11 @@ export async function getAuthUser(req: any): Promise<AuthUser | null> {
  * Enforces authentication requirement on protected routes.
  */
 export async function requireAuth(req: any, res: any): Promise<AuthUser | null> {
+
+  console.log("AUTH STEP 1");
   const user = await getAuthUser(req);
+  console.log("AUTH STEP 2", user);
+
   if (!user) {
     res.status(401).json({
       error: 'Unauthorized: Authentication token is missing, expired, or invalid',

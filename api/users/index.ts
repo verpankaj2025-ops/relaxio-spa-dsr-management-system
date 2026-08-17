@@ -14,32 +14,27 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL ||
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 
 export default async function handler(req: any, res: any) {
+
+  console.log("STEP 1 - Handler Started");
+
   const user = await requireAuth(req, res);
+
+  console.log("STEP 2 - Auth Result:", user);
+
   if (!user) return;
 
-  const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+  const supabase = null;
+
+  console.log("SUPABASE ENABLED:", !!supabase);
 
   // ---------------------------------------------------------
-  // GET: List users
-  // ---------------------------------------------------------
-  if (req.method === 'GET') {
-    try {
-      if (supabase) {
-        try {
-          const { data, error } = await supabase
-            .from('users')
-            .select('id, name, email, role, status, created_at')
-            .order('created_at', { ascending: false });
+// GET: List users
+// ---------------------------------------------------------
+if (req.method === 'GET') {
+  console.log("USERS API TEST");
 
-          if (!error && data && data.length > 0) return res.status(200).json(data);
-        } catch (_) {}
-      }
-
-      return res.status(200).json(db.getUsers());
-    } catch (err: any) {
-      return sendInternalError(res, err, 'Failed to list users');
-    }
-  }
+  return res.status(200).json(db.getUsers());
+}
 
   // Administrative operations require SUPER_ADMIN role
   const adminUser = await requireRole(req, res, ['SUPER_ADMIN']);

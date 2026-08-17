@@ -107,6 +107,11 @@ async function startServer() {
 
   app.use(express.json({ limit: '2mb' }));
 
+  app.use((req, res, next) => {
+  console.log("REQUEST:", req.method, req.originalUrl);
+  next();
+});
+
   // Production logging: simple file + console logger
   if (process.env.NODE_ENV === 'production') {
     const logsDir = path.join(process.cwd(), 'logs');
