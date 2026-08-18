@@ -73,6 +73,11 @@ export const CustomerEntryModal: React.FC<CustomerEntryModalProps> = ({
       setErrorMsg('Mobile Number is required');
       return;
     }
+
+    if (!/^\d{10}$/.test(mobileNumber.trim())) {
+      setErrorMsg('Mobile Number must contain exactly 10 digits');
+      return;
+    }
     if (!visitDate) {
       setErrorMsg('Visit Date is required');
       return;
@@ -176,10 +181,15 @@ export const CustomerEntryModal: React.FC<CustomerEntryModalProps> = ({
               <label className="block text-xs font-medium text-stone-300 mb-1.5">Mobile Number *</label>
               <input
                 type="tel"
+                inputMode="numeric"
+                maxLength={10}
                 required
                 placeholder="Enter 10-digit mobile"
                 value={mobileNumber}
-                onChange={e => setMobileNumber(e.target.value)}
+                onChange={e => {
+                  const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  setMobileNumber(digitsOnly);
+                }}
                 className="w-full bg-stone-950 border border-stone-800 focus:border-amber-500 rounded-xl px-3.5 py-3 text-sm text-stone-100 focus:outline-none transition shadow-inner font-mono"
               />
             </div>
@@ -269,11 +279,10 @@ export const CustomerEntryModal: React.FC<CustomerEntryModalProps> = ({
               <button
                 type="button"
                 onClick={() => setPaymentMode('Cash')}
-                className={`py-3 px-2 rounded-xl border text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer ${
-                  paymentMode === 'Cash'
+                className={`py-3 px-2 rounded-xl border text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer ${paymentMode === 'Cash'
                     ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-md'
                     : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
-                }`}
+                  }`}
               >
                 <Wallet className="w-4 h-4" />
                 <span>Cash</span>
@@ -282,11 +291,10 @@ export const CustomerEntryModal: React.FC<CustomerEntryModalProps> = ({
               <button
                 type="button"
                 onClick={() => setPaymentMode('UPI')}
-                className={`py-3 px-2 rounded-xl border text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer ${
-                  paymentMode === 'UPI'
+                className={`py-3 px-2 rounded-xl border text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer ${paymentMode === 'UPI'
                     ? 'bg-sky-500/20 border-sky-500 text-sky-400 shadow-md'
                     : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
-                }`}
+                  }`}
               >
                 <Smartphone className="w-4 h-4" />
                 <span>UPI</span>
@@ -295,11 +303,10 @@ export const CustomerEntryModal: React.FC<CustomerEntryModalProps> = ({
               <button
                 type="button"
                 onClick={() => setPaymentMode('Card')}
-                className={`py-3 px-2 rounded-xl border text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer ${
-                  paymentMode === 'Card'
+                className={`py-3 px-2 rounded-xl border text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer ${paymentMode === 'Card'
                     ? 'bg-purple-500/20 border-purple-500 text-purple-400 shadow-md'
                     : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
-                }`}
+                  }`}
               >
                 <CreditCard className="w-4 h-4" />
                 <span>Card</span>
